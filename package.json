@@ -15,7 +15,9 @@
   "author": "Michael Peng <michael@mcmoo.org>",
   "license": "MIT",
   "dependencies": {
-    "discord.js": "^14.7.1"
+    "@types/shortid": "^0.0.29",
+    "discord.js": "^14.7.1",
+    "shortid": "^2.2.16"
   },
   "devDependencies": {
     "prettier-standard": "^16.4.1",
