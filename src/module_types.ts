@@ -6,7 +6,6 @@ import {
   ClientEvents,
   CommandInteraction,
   ContextMenuCommandBuilder,
-  ContextMenuCommandInteraction,
   SlashCommandBuilder,
   Client,
   UserContextMenuCommandInteraction,
@@ -145,5 +144,5 @@ export interface IModule<ID> {
   /**
    * The underlying client instance hosting this module. Use this to access guild managers, create DM channels, manage the bot's presence, etc.
    */
-  client: Client<true>
+  client: Client
 }

@@ -1,13 +1,10 @@
 import {
   ApplicationCommandType,
-  Awaitable,
-  CacheType,
   ChatInputCommandInteraction,
   Client,
   ClientEvents,
   CommandInteraction,
   ContextMenuCommandBuilder,
-  ContextMenuCommandType,
   Events,
   GatewayIntentBits,
   Interaction,
@@ -20,7 +17,7 @@ import {
   CommandHandlersOrOnRun,
   IModule
 } from './module_types'
-import * as shortid from 'shortid'
+import shortid from 'shortid'
 import { stripMarkdownTag } from './utils'
 
 /**
@@ -34,6 +31,7 @@ export class Module implements IModule<HandlerID> {
   eventHandlers: {
     [id: string]: {
       events: (keyof ClientEvents)[]
+      once: boolean
       handler: (...args: any) => any
     }
   } = {}
@@ -50,32 +48,31 @@ export class Module implements IModule<HandlerID> {
   constructor (
     public readonly id: string,
     public readonly intents: GatewayIntentBits[],
-    public client: Client<true>
+    public client: Client
   ) {}
 
   when<K extends keyof ClientEvents> (
     event: K | K[],
     handler: (...args: ClientEvents[K]) => any
   ): HandlerID {
-    const events = Array.isArray(event) ? event : [event]
-    for (const evt of events) {
-      this.client.on(evt, handler)
-    }
-    const id = this.generateId('when')
-    this.eventHandlers[id] = { events, handler }
-    return new HandlerID(id)
+    return this.handler(event, handler, false)
   }
 
   once<K extends keyof ClientEvents> (
     event: K | K[],
     handler: (...args: ClientEvents[K]) => any
   ): HandlerID {
+    return this.handler(event, handler, true)
+  }
+
+  private handler<K extends keyof ClientEvents> (
+    event: K | K[],
+    handler: (...args: ClientEvents[K]) => any,
+    once: boolean
+  ): HandlerID {
     const events = Array.isArray(event) ? event : [event]
-    for (const evt of events) {
-      this.client.once(evt, handler)
-    }
-    const id = this.generateId('once')
-    this.eventHandlers[id] = { events, handler }
+    const id = this.generateId(once ? 'once' : 'when')
+    this.eventHandlers[id] = { events, once, handler }
     return new HandlerID(id)
   }
 
@@ -93,11 +90,7 @@ export class Module implements IModule<HandlerID> {
       .setName(command)
       .setDescription(description)
 
-    const handlers: CommandHandlers<
-      SlashCommandBuilder,
-      ChatInputCommandInteraction,
-      T
-    > =
+    const handlers =
       handlersOrOnRun instanceof Function
         ? {
             run: handlersOrOnRun
@@ -105,8 +98,7 @@ export class Module implements IModule<HandlerID> {
         : handlersOrOnRun
 
     if (handlers.build) builder = handlers.build(builder)
-    const handler = this.slashHandler(command, handlers)
-    this.client.on(Events.InteractionCreate, handler)
+    const handler = this.slashHandler(command, id, handlers)
     this.slashCommands[id] = [builder, handler]
 
     return new HandlerID(id)
@@ -114,11 +106,12 @@ export class Module implements IModule<HandlerID> {
 
   private slashHandler<T> (
     name: string,
+    id: string,
     handlers: CommandHandlers<any, ChatInputCommandInteraction, T>
   ) {
     return async (intx: Interaction) => {
       if (intx.isChatInputCommand() && intx.commandName === name) {
-        await this.checkThenRun(intx, `${this.id} /${name}`, handlers)
+        await this.checkThenRun(intx, id, handlers)
       }
     }
   }
@@ -156,7 +149,8 @@ export class Module implements IModule<HandlerID> {
     try {
       resolved = check instanceof Function ? await check(intx) : undefined
     } catch (checkFail: any) {
-      const content = checkFail instanceof Error ? checkFail.message : checkFail.toString()
+      const content =
+        checkFail instanceof Error ? checkFail.message : checkFail.toString()
       await intx.reply({
         content,
         ephemeral: true
@@ -196,18 +190,35 @@ export class Module implements IModule<HandlerID> {
       T
     >
   ): HandlerID {
-    const id = this.generateId(`ContextMenu ${JSON.stringify(label)}`)
+    const id = `${this.id}: ContextMenu ${JSON.stringify(label)}`
     let builder = new ContextMenuCommandBuilder().setName(label).setType(type)
-    const handlers = handlersOrOnRun instanceof Function
-      ? { run: handlersOrOnRun }
-      : handlersOrOnRun
-    
+    const handlers =
+      handlersOrOnRun instanceof Function
+        ? { run: handlersOrOnRun }
+        : handlersOrOnRun
+
     if (handlers.build) builder = handlers.build(builder)
-    const eventHandler = type === ApplicationCommandType.Message ?
-      this.messageContextMenuHandler(label, id, handlers as CommandHandlers<ContextMenuCommandBuilder, MessageContextMenuCommandInteraction, T>) :
-      this.userContextMenuHandler(label, id, handlers as CommandHandlers<ContextMenuCommandBuilder, UserContextMenuCommandInteraction, T>)
-    
-    this.client.on(Events.InteractionCreate, eventHandler)
+    const eventHandler =
+      type === ApplicationCommandType.Message
+        ? this.messageContextMenuHandler(
+            label,
+            id,
+            handlers as CommandHandlers<
+              ContextMenuCommandBuilder,
+              MessageContextMenuCommandInteraction,
+              T
+            >
+          )
+        : this.userContextMenuHandler(
+            label,
+            id,
+            handlers as CommandHandlers<
+              ContextMenuCommandBuilder,
+              UserContextMenuCommandInteraction,
+              T
+            >
+          )
+
     this.contextMenuCommands[id] = [builder, eventHandler]
     return new HandlerID(id)
   }
@@ -220,12 +231,45 @@ export class Module implements IModule<HandlerID> {
       }
       return true
     }
-    const command = this.slashCommands[handler.id] ?? this.contextMenuCommands[handler.id]
+    const command =
+      this.slashCommands[handler.id] ?? this.contextMenuCommands[handler.id]
     if (command) {
       this.client.removeListener(Events.InteractionCreate, command[1])
       return true
     }
     return false
+  }
+
+  applyToClient () {
+    for (const { events, once, handler } of Object.values(this.eventHandlers)) {
+      for (const evt of events) {
+        if (once) {
+          this.client.once(evt, handler)
+        } else {
+          this.client.on(evt, handler)
+        }
+      }
+    }
+    for (const [_, handler] of [
+      ...Object.values(this.slashCommands),
+      ...Object.values(this.contextMenuCommands)
+    ]) {
+      this.client.on(Events.InteractionCreate, handler)
+    }
+  }
+
+  clearFromClient () {
+    for (const { events, handler } of Object.values(this.eventHandlers)) {
+      for (const evt of events) {
+        this.client.removeListener(evt, handler)
+      }
+    }
+    for (const [_, handler] of [
+      ...Object.values(this.slashCommands),
+      ...Object.values(this.contextMenuCommands)
+    ]) {
+      this.client.removeListener(Events.InteractionCreate, handler)
+    }
   }
 
   private generateId (source: string): string {
