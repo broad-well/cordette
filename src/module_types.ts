@@ -38,9 +38,9 @@ export interface CommandConfig<B, I extends CommandInteraction, T = void> {
    *
    * If you detect any problems with the interaction and decide that it shouldn't take effect, throw an {@link Error}.
    *
-   * @param interaction The interaction you are responding to.
+   * @param interaction The interaction you are responding to. Do not reply to this interaction directly. If you find it invalid, throw an {@link Error}.
    */
-  check?: (interaction: I) => Awaitable<T>
+  check?: (interaction: Omit<I, "reply"|"showModal">) => Awaitable<T>
 
   /**
    * Fulfill the incoming interaction after it has been checked with {@link check}.

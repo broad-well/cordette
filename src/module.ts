@@ -174,13 +174,19 @@ export class Module implements IModule<HandlerID> {
         })
       }
     } catch (err: any) {
-      console.info(`${id} failed`)
-      console.error(err)
-      const content = err instanceof Error ? err.message : err.toString()
-      await intx.reply({
-        content: stripMarkdownTag`❗ There was an error.\`\`\`${content}\`\`\``,
-        ephemeral: true
-      })
+      try {
+        console.info(`${id} failed`)
+        console.error(err)
+        const content = stripMarkdownTag`❗ There was an error.\`\`\`${err instanceof Error ? err.message : err.toString()}\`\`\``
+        if (intx.replied) {
+          await intx.followUp({ content, ephemeral: true })
+        } else {
+          await intx.reply({ content, ephemeral: true })
+        }
+      } catch (err2: any) {
+        console.error(`Catastrophic failure trying to react to error`, err)
+        console.error(err2)
+      }
     }
   }
 

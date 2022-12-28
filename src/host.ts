@@ -105,8 +105,9 @@ export class ModuleHost implements IModuleHost<HandlerID> {
       const missingIntents = this.client.options.intents.missing(after.intents)
       if (missingIntents.length > 0) {
         this.client.destroy()
-        // must move from staged to modules before this (which calls applyToClient on the new client)
-        this.setupNewClient()
+        // must do this.modules[newId] = this.stagedModules[newId] before this
+        // this derives the new intents and listeners from this.modules
+        this.resetClient()
       }
     }
   }
@@ -115,16 +116,15 @@ export class ModuleHost implements IModuleHost<HandlerID> {
     await this.client.login(this.token)
   }
 
-  private setupNewClient (): void {
-    this.client = new Client({ intents: Object.values(this.modules).flatMap(m => m.intents) })
+  private resetClient (): void {
+    this.client.removeAllListeners()
+    this.client.destroy()
+    this.client.options.intents.add(Object.values(this.modules).flatMap(m => m.intents))
     this.client.token = this.token
     this.client.rest.setToken(this.token)
     this.client.once(Events.ClientReady, () => {
       console.info('ModuleHost client is ready!')
     })
-    for (const mod of [...Object.values(this.modules), ...Object.values(this.stagedModules)]) {
-      mod.client = this.client
-    }
     for (const mod of Object.values(this.modules)) {
       mod.applyToClient()
     }
