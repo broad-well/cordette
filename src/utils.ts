@@ -5,7 +5,7 @@ export function stripMarkdown (s: string): string {
 export function stripMarkdownTag (
   strings: TemplateStringsArray,
   ...expr: unknown[]
-) {
+): string {
   return strings.reduce(
     (acc, s, i) =>
       acc + s + (i < expr.length ? stripMarkdown(String(expr[i])) : ''),

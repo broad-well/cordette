@@ -2,7 +2,6 @@ import {
   ApplicationCommandType,
   Awaitable,
   ChatInputCommandInteraction,
-  Events,
   ClientEvents,
   CommandInteraction,
   ContextMenuCommandBuilder,
@@ -14,17 +13,24 @@ import {
 } from 'discord.js'
 
 /**
- * A set of functions that describes the details of an interaction and how to respond when someone uses it.
+ * A description of the details of an interaction and how to respond when someone uses it.
  * @template B The type of builder for the interaction that this object describes.
  * @template I The type of interaction that this object describes.
  * @template T Any arbitrary type for the information successfully resolved in the `check` stage to be passed to the `run` stage.
  */
-export interface CommandHandlers<B, I extends CommandInteraction, T = void> {
+export interface CommandConfig<B, I extends CommandInteraction, T = void> {
+  /**
+   * The snowflake ID of the guild to make this command available to.
+   * If not specified, this command will be registered as a global command
+   * (available to all guilds with the `applications.commands` scope and DMs)
+   */
+  guild?: string
+
   /**
    * Supply details about the interaction being built.
    * @param builder The builder for you to attach details to.
    */
-  build?(builder: B): B
+  build?: (builder: B) => B
 
   /**
    * Validate the incoming interaction to see whether you should let it take effect.
@@ -34,23 +40,23 @@ export interface CommandHandlers<B, I extends CommandInteraction, T = void> {
    *
    * @param interaction The interaction you are responding to.
    */
-  check?<T>(interaction: I): Awaitable<T>
+  check?: (interaction: I) => Awaitable<T>
 
   /**
    * Fulfill the incoming interaction after it has been checked with {@link check}.
    * @param interaction The interaction you are responding to.
    * @param checkReturnValue The return value of the call to {@link check} with this interaction.
    */
-  run(interaction: I, checkReturnValue?: T): Awaitable<string | null>
+  run: (interaction: I, checkReturnValue?: T) => Awaitable<string | void>
 }
 
 /**
- * Either an object with "build check run" components describing a handler or
+ * Either an object with "guild build check run" components describing a handler or
  * just the "run" function describing how to respond to an interaction.
  */
-export type CommandHandlersOrOnRun<B, I extends CommandInteraction, T = void> =
-  | CommandHandlers<B, I, T>
-  | ((i: I) => Awaitable<string | null>)
+export type CommandConfigOrOnRun<B, I extends CommandInteraction, T = void> =
+  | CommandConfig<B, I, T>
+  | ((i: I) => Awaitable<string | void>)
 
 /**
  * A module describes a coherent high-level feature, such as quote tracking, class lookups, and schedule sharing.
@@ -79,10 +85,10 @@ export interface IModule<ID> {
    * @example mod.when(Events.MessageCreate, msg => msg.react('✨'));
    * @example mod.when([Events.MessageUpdate, Events.MessageDelete], async msg => await msg.channel.send('sneaky!'));
    */
-  when<K extends keyof ClientEvents>(
+  when: <K extends keyof ClientEvents>(
     event: K | K[],
     handler: (...args: ClientEvents[K]) => Awaitable<any>
-  ): ID
+  ) => ID
 
   /**
    * Register an event handler that only runs at most once.
@@ -91,10 +97,10 @@ export interface IModule<ID> {
    * @returns An ID that you can pass to {@link IModule.remove} in order to unregister this event handler.
    * @example mod.once(Events.Error, () => process.exit(1));
    */
-  once<K extends keyof ClientEvents>(
+  once: <K extends keyof ClientEvents>(
     event: K | K[],
     handler: (...args: ClientEvents[K]) => Awaitable<any>
-  ): ID
+  ) => ID
 
   /**
    * Create a slash (/) command.
@@ -103,15 +109,15 @@ export interface IModule<ID> {
    * @param handlers Functions that specify the details of this command and how to react when someone uses it.
    * @returns An ID that you can pass to {@link IModule.remove} in order to remove this slash command.
    */
-  slash<T>(
+  slash: <T>(
     command: string,
     description: string,
-    handlers: CommandHandlersOrOnRun<
-      SlashCommandBuilder,
-      ChatInputCommandInteraction,
-      T
+    handlers: CommandConfigOrOnRun<
+    SlashCommandBuilder,
+    ChatInputCommandInteraction,
+    T
     >
-  ): ID
+  ) => ID
 
   /**
    * Create a context menu item.
@@ -120,26 +126,26 @@ export interface IModule<ID> {
    * @param handlers Functions that specify the details of this menu command and how to react when someone uses it.
    * @returns An ID that you can pass to {@link IModule.remove} in order to remove this menu item.
    */
-  menu<
+  menu: <
     T,
     I extends ApplicationCommandType.User | ApplicationCommandType.Message
   >(
     label: string,
     type: I,
-    handlers: CommandHandlersOrOnRun<
-      ContextMenuCommandBuilder,
-      I extends ApplicationCommandType.User
-        ? UserContextMenuCommandInteraction
-        : MessageContextMenuCommandInteraction,
-      T
+    handlers: CommandConfigOrOnRun<
+    ContextMenuCommandBuilder,
+    I extends ApplicationCommandType.User
+      ? UserContextMenuCommandInteraction
+      : MessageContextMenuCommandInteraction,
+    T
     >
-  ): ID
+  ) => ID
 
   /**
    * Unregister or remove an event handler, command, or context menu item.
    * @param handler The ID returned by the function that created the event handler, command, or other interaction you want to remove.
    */
-  remove(handler: ID): boolean
+  remove: (handler: ID) => boolean
 
   /**
    * The underlying client instance hosting this module. Use this to access guild managers, create DM channels, manage the bot's presence, etc.

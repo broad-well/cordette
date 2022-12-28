@@ -13,8 +13,8 @@ import {
   UserContextMenuCommandInteraction
 } from 'discord.js'
 import {
-  CommandHandlers,
-  CommandHandlersOrOnRun,
+  CommandConfig,
+  CommandConfigOrOnRun,
   IModule
 } from './module_types'
 import shortid from 'shortid'
@@ -30,19 +30,26 @@ export class HandlerID {
 export class Module implements IModule<HandlerID> {
   eventHandlers: {
     [id: string]: {
-      events: (keyof ClientEvents)[]
+      events: Array<keyof ClientEvents>
       once: boolean
       handler: (...args: any) => any
     }
   } = {}
+
   slashCommands: {
-    [id: string]: [builder: SlashCommandBuilder, handler: (...args: any) => any]
-  } = {}
-  contextMenuCommands: {
-    [id: string]: [
-      builder: ContextMenuCommandBuilder,
+    [id: string]: {
+      guild?: string
+      builder: Pick<SlashCommandBuilder, 'toJSON' | 'name'>
       handler: (...args: any) => any
-    ]
+    }
+  } = {}
+
+  contextMenuCommands: {
+    [id: string]: {
+      guild?: string
+      builder: Pick<ContextMenuCommandBuilder, 'toJSON' | 'name'>
+      handler: (...args: any) => any
+    }
   } = {}
 
   constructor (
@@ -79,10 +86,10 @@ export class Module implements IModule<HandlerID> {
   slash<T> (
     command: string,
     description: string,
-    handlersOrOnRun: CommandHandlersOrOnRun<
-      SlashCommandBuilder,
-      ChatInputCommandInteraction,
-      T
+    configOrOnRun: CommandConfigOrOnRun<
+    SlashCommandBuilder,
+    ChatInputCommandInteraction,
+    T
     >
   ): HandlerID {
     const id = `${this.id}: /${command}`
@@ -90,16 +97,16 @@ export class Module implements IModule<HandlerID> {
       .setName(command)
       .setDescription(description)
 
-    const handlers =
-      handlersOrOnRun instanceof Function
+    const config =
+      configOrOnRun instanceof Function
         ? {
-            run: handlersOrOnRun
+            run: configOrOnRun
           }
-        : handlersOrOnRun
+        : configOrOnRun
 
-    if (handlers.build) builder = handlers.build(builder)
-    const handler = this.slashHandler(command, id, handlers)
-    this.slashCommands[id] = [builder, handler]
+    if (config.build != null) builder = config.build(builder)
+    const handler = this.slashHandler(command, id, config)
+    this.slashCommands[id] = { guild: config.guild, builder, handler }
 
     return new HandlerID(id)
   }
@@ -107,11 +114,11 @@ export class Module implements IModule<HandlerID> {
   private slashHandler<T> (
     name: string,
     id: string,
-    handlers: CommandHandlers<any, ChatInputCommandInteraction, T>
+    config: CommandConfig<any, ChatInputCommandInteraction, T>
   ) {
     return async (intx: Interaction) => {
       if (intx.isChatInputCommand() && intx.commandName === name) {
-        await this.checkThenRun(intx, id, handlers)
+        await this.checkThenRun(intx, id, config)
       }
     }
   }
@@ -119,11 +126,11 @@ export class Module implements IModule<HandlerID> {
   private userContextMenuHandler<T> (
     name: string,
     id: string,
-    handlers: CommandHandlers<any, UserContextMenuCommandInteraction, T>
+    config: CommandConfig<any, UserContextMenuCommandInteraction, T>
   ) {
     return async (intx: Interaction) => {
       if (intx.isUserContextMenuCommand() && intx.commandName === name) {
-        await this.checkThenRun(intx, id, handlers)
+        await this.checkThenRun(intx, id, config)
       }
     }
   }
@@ -131,11 +138,11 @@ export class Module implements IModule<HandlerID> {
   private messageContextMenuHandler<T> (
     name: string,
     id: string,
-    handlers: CommandHandlers<any, MessageContextMenuCommandInteraction, T>
+    config: CommandConfig<any, MessageContextMenuCommandInteraction, T>
   ) {
     return async (intx: Interaction) => {
       if (intx.isMessageContextMenuCommand() && intx.commandName === name) {
-        await this.checkThenRun(intx, id, handlers)
+        await this.checkThenRun(intx, id, config)
       }
     }
   }
@@ -143,8 +150,9 @@ export class Module implements IModule<HandlerID> {
   private async checkThenRun<I extends CommandInteraction, T> (
     intx: I,
     id: string,
-    { check, run }: CommandHandlers<any, I, T>
-  ) {
+    { guild, check, run }: CommandConfig<any, I, T>
+  ): Promise<void> {
+    if (guild !== undefined && intx.guildId !== guild) return
     let resolved: T | undefined
     try {
       resolved = check instanceof Function ? await check(intx) : undefined
@@ -159,7 +167,7 @@ export class Module implements IModule<HandlerID> {
     }
     try {
       const result = await run(intx, resolved)
-      if (result !== null) {
+      if (result !== null && result !== undefined) {
         await intx.reply({
           content: result,
           ephemeral: true
@@ -182,50 +190,38 @@ export class Module implements IModule<HandlerID> {
   > (
     label: string,
     type: I,
-    handlersOrOnRun: CommandHandlersOrOnRun<
-      ContextMenuCommandBuilder,
-      I extends ApplicationCommandType.User
-        ? UserContextMenuCommandInteraction
-        : MessageContextMenuCommandInteraction,
-      T
+    configOrOnRun: CommandConfigOrOnRun<
+    ContextMenuCommandBuilder,
+    I extends ApplicationCommandType.User
+      ? UserContextMenuCommandInteraction
+      : MessageContextMenuCommandInteraction,
+    T
     >
   ): HandlerID {
     const id = `${this.id}: ContextMenu ${JSON.stringify(label)}`
     let builder = new ContextMenuCommandBuilder().setName(label).setType(type)
-    const handlers =
-      handlersOrOnRun instanceof Function
-        ? { run: handlersOrOnRun }
-        : handlersOrOnRun
+    const config =
+      configOrOnRun instanceof Function
+        ? { run: configOrOnRun }
+        : configOrOnRun
 
-    if (handlers.build) builder = handlers.build(builder)
+    if (config.build != null) builder = config.build(builder)
     const eventHandler =
       type === ApplicationCommandType.Message
         ? this.messageContextMenuHandler(
-            label,
-            id,
-            handlers as CommandHandlers<
-              ContextMenuCommandBuilder,
-              MessageContextMenuCommandInteraction,
-              T
-            >
-          )
+          label, id, config as CommandConfig<ContextMenuCommandBuilder, MessageContextMenuCommandInteraction, T>
+        )
         : this.userContextMenuHandler(
-            label,
-            id,
-            handlers as CommandHandlers<
-              ContextMenuCommandBuilder,
-              UserContextMenuCommandInteraction,
-              T
-            >
-          )
+          label, id, config as CommandConfig<ContextMenuCommandBuilder, UserContextMenuCommandInteraction, T>
+        )
 
-    this.contextMenuCommands[id] = [builder, eventHandler]
+    this.contextMenuCommands[id] = { guild: config.guild, builder, handler: eventHandler }
     return new HandlerID(id)
   }
 
   remove (handler: HandlerID): boolean {
     const eventHandler = this.eventHandlers[handler.id]
-    if (eventHandler) {
+    if (eventHandler !== undefined) {
       for (const evt of eventHandler.events) {
         this.client.removeListener(evt, eventHandler.handler)
       }
@@ -233,14 +229,14 @@ export class Module implements IModule<HandlerID> {
     }
     const command =
       this.slashCommands[handler.id] ?? this.contextMenuCommands[handler.id]
-    if (command) {
-      this.client.removeListener(Events.InteractionCreate, command[1])
+    if (command !== undefined) {
+      this.client.removeListener(Events.InteractionCreate, command.handler)
       return true
     }
     return false
   }
 
-  applyToClient () {
+  applyToClient (): void {
     for (const { events, once, handler } of Object.values(this.eventHandlers)) {
       for (const evt of events) {
         if (once) {
@@ -250,7 +246,7 @@ export class Module implements IModule<HandlerID> {
         }
       }
     }
-    for (const [_, handler] of [
+    for (const { handler } of [
       ...Object.values(this.slashCommands),
       ...Object.values(this.contextMenuCommands)
     ]) {
@@ -258,13 +254,13 @@ export class Module implements IModule<HandlerID> {
     }
   }
 
-  clearFromClient () {
+  clearFromClient (): void {
     for (const { events, handler } of Object.values(this.eventHandlers)) {
       for (const evt of events) {
         this.client.removeListener(evt, handler)
       }
     }
-    for (const [_, handler] of [
+    for (const { handler } of [
       ...Object.values(this.slashCommands),
       ...Object.values(this.contextMenuCommands)
     ]) {
