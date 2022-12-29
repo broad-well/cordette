@@ -119,7 +119,7 @@ export class ModuleHost implements IModuleHost<HandlerID> {
   private resetClient (): void {
     this.client.removeAllListeners()
     this.client.destroy()
-    this.client.options.intents.add(Object.values(this.modules).flatMap(m => m.intents))
+    this.client.options.intents = this.client.options.intents.add(Object.values(this.modules).flatMap(m => m.intents))
     this.client.token = this.token
     this.client.rest.setToken(this.token)
     this.client.once(Events.ClientReady, () => {
