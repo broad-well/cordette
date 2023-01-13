@@ -55,8 +55,6 @@ export class ModuleHost implements IModuleHost<HandlerID> {
       ]
     })
     this.client.rest.setToken(this.token)
-
-    this.client.on('interactionCreate', x => console.log(x.toJSON()))
   }
 
   async remove (module: IModule<HandlerID>): Promise<void> {
