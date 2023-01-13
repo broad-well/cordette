@@ -184,7 +184,7 @@ export class Module implements IModule<HandlerID> {
           await intx.reply({ content, ephemeral: true })
         }
       } catch (err2: any) {
-        console.error(`Catastrophic failure trying to react to error`, err)
+        console.error('Catastrophic failure trying to react to error', err)
         console.error(err2)
       }
     }

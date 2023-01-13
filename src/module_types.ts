@@ -40,14 +40,14 @@ export interface CommandConfig<B, I extends CommandInteraction, T = void> {
    *
    * @param interaction The interaction you are responding to. Do not reply to this interaction directly. If you find it invalid, throw an {@link Error}.
    */
-  check?: (interaction: Omit<I, "reply"|"showModal">) => Awaitable<T>
+  check?: (interaction: Omit<I, 'reply' | 'showModal'>) => Awaitable<T>
 
   /**
    * Fulfill the incoming interaction after it has been checked with {@link check}.
    * @param interaction The interaction you are responding to.
    * @param checkReturnValue The return value of the call to {@link check} with this interaction.
    */
-  run: (interaction: I, checkReturnValue?: T) => Awaitable<string | void>
+  run: (interaction: I, checkReturnValue?: T) => Awaitable<string> | undefined
 }
 
 /**
@@ -56,7 +56,7 @@ export interface CommandConfig<B, I extends CommandInteraction, T = void> {
  */
 export type CommandConfigOrOnRun<B, I extends CommandInteraction, T = void> =
   | CommandConfig<B, I, T>
-  | ((i: I) => Awaitable<string | void>)
+  | ((i: I) => Awaitable<string> | undefined)
 
 /**
  * A module describes a coherent high-level feature, such as quote tracking, class lookups, and schedule sharing.
@@ -112,11 +112,7 @@ export interface IModule<ID> {
   slash: <T>(
     command: string,
     description: string,
-    handlers: CommandConfigOrOnRun<
-    SlashCommandBuilder,
-    ChatInputCommandInteraction,
-    T
-    >
+    handlers: CommandConfigOrOnRun<SlashCommandBuilder, ChatInputCommandInteraction, T>
   ) => ID
 
   /**
@@ -132,8 +128,7 @@ export interface IModule<ID> {
   >(
     label: string,
     type: I,
-    handlers: CommandConfigOrOnRun<
-    ContextMenuCommandBuilder,
+    handlers: CommandConfigOrOnRun<ContextMenuCommandBuilder,
     I extends ApplicationCommandType.User
       ? UserContextMenuCommandInteraction
       : MessageContextMenuCommandInteraction,

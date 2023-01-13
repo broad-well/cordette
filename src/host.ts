@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, RESTPostAPIApplicationCommandsJSONBody, Routes, Events, IntentsBitField } from 'discord.js'
 import { HandlerID, Module } from './module'
 import { IModule } from './module_types'
+import assert from 'node:assert/strict'
 
 export interface IModuleHost<ID> {
   /**
@@ -42,8 +43,8 @@ export function commandDiff (beforeOrNull: Pick<Module, 'slashCommands' | 'conte
 }
 
 export class ModuleHost implements IModuleHost<HandlerID> {
-  modules: { [id: string]: Module } = {}
-  stagedModules: { [id: string]: Module } = {}
+  modules: Map<string, Module> = new Map()
+  stagedModules: Map<string, Module> = new Map()
   client: Client
 
   constructor (private readonly token: string, private readonly clientId: string) {
@@ -58,10 +59,10 @@ export class ModuleHost implements IModuleHost<HandlerID> {
   }
 
   async remove (module: IModule<HandlerID>): Promise<void> {
-    if (!(module.id in this.modules)) {
+    const mod = this.modules.get(module.id)
+    if (mod === undefined) {
       throw new Error('We can\'t unregister a module that isn\'t registered')
     }
-    const mod = this.modules[module.id]
     if (module !== mod) {
       throw new Error(`The registered module with ID ${JSON.stringify(module.id)} is different from the given module despite having the same ID`)
     }
@@ -69,24 +70,27 @@ export class ModuleHost implements IModuleHost<HandlerID> {
     mod.clearFromClient()
     await Promise.all([...Object.values(mod.slashCommands), ...Object.values(mod.contextMenuCommands)].map(async cmd =>
       await this.deleteAppCommand(cmd.builder.name, cmd.guild)))
-    delete this.modules[module.id]
-    this.client.options.intents = new IntentsBitField(Object.values(this.modules).flatMap(m => m.intents))
+    this.modules.delete(module.id)
+    this.client.options.intents = new IntentsBitField(Array.from(this.modules.values()).flatMap(m => m.intents))
   }
 
   module (id: string, intents: GatewayIntentBits[] = []): IModule<HandlerID> {
-    this.stagedModules[id] = new Module(id, intents, this.client)
-    return this.stagedModules[id]
+    const mod = new Module(id, intents, this.client)
+    this.stagedModules.set(id, mod)
+    return mod
   }
 
   async commitStaged (): Promise<void> {
-    for (const newId of Object.keys(this.stagedModules)) {
+    for (const newId of this.stagedModules.keys()) {
       let before: Module | null = null
-      const after = this.stagedModules[newId]
+      const after = this.stagedModules.get(newId)
+      assert(after !== undefined)
 
       // Listeners
-      if (newId in this.modules) {
-        before = this.modules[newId]
-        before.clearFromClient()
+      const maybeBefore = this.modules.get(newId)
+      if (maybeBefore !== undefined) {
+        before = maybeBefore
+        before?.clearFromClient()
       }
       after.applyToClient()
 
@@ -96,8 +100,8 @@ export class ModuleHost implements IModuleHost<HandlerID> {
       await Promise.all([...Object.values(after.slashCommands), ...Object.values(after.contextMenuCommands)]
         .map(async it => await this.upsertAppCommand(it.builder.toJSON(), it.guild)))
 
-      this.modules[newId] = this.stagedModules[newId]
-      delete this.stagedModules[newId]
+      this.modules.set(newId, after)
+      this.stagedModules.delete(newId)
 
       // Missing intents
       const missingIntents = this.client.options.intents.missing(after.intents)
@@ -105,7 +109,7 @@ export class ModuleHost implements IModuleHost<HandlerID> {
         this.client.destroy()
         // must do this.modules[newId] = this.stagedModules[newId] before this
         // this derives the new intents and listeners from this.modules
-        this.resetClient()
+        await this.resetClient()
       }
     }
   }
@@ -114,17 +118,21 @@ export class ModuleHost implements IModuleHost<HandlerID> {
     await this.client.login(this.token)
   }
 
-  private resetClient (): void {
+  private async resetClient (): Promise<void> {
+    const loggedIn = this.client.isReady()
     this.client.removeAllListeners()
     this.client.destroy()
-    this.client.options.intents = this.client.options.intents.add(Object.values(this.modules).flatMap(m => m.intents))
+    this.client.options.intents = this.client.options.intents.add(Array.from(this.modules.values()).flatMap(m => m.intents))
     this.client.token = this.token
     this.client.rest.setToken(this.token)
     this.client.once(Events.ClientReady, () => {
       console.info('ModuleHost client is ready!')
     })
-    for (const mod of Object.values(this.modules)) {
+    for (const mod of Array.from(this.modules.values())) {
       mod.applyToClient()
+    }
+    if (loggedIn) {
+      await this.client.login(this.token)
     }
   }
 
