@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, RESTPostAPIApplicationCommandsJSONBody, Routes, Events, IntentsBitField } from 'discord.js'
+import { Client, GatewayIntentBits, RESTPostAPIApplicationCommandsJSONBody, Routes, Events, IntentsBitField, RESTPutAPIApplicationCommandsJSONBody } from 'discord.js'
 import { HandlerID, Module } from './module'
 import { IModule } from './module_types'
 import assert from 'node:assert/strict'
@@ -81,6 +81,13 @@ export class ModuleHost implements IModuleHost<HandlerID> {
   }
 
   async commitStaged (): Promise<void> {
+    // If this.modules is empty, do bulk overwrite instead (this is probably the first commitStaged call)
+    if (this.modules.size === 0) {
+      const cmds = Array.from(this.stagedModules.values())
+        .flatMap(mod => [...Object.values(mod.slashCommands), ...Object.values(mod.contextMenuCommands)])
+        .map(cmd => cmd.builder.toJSON())
+      await this.overwriteAppCommands(cmds)
+    }
     for (const newId of this.stagedModules.keys()) {
       let before: Module | null = null
       const after = this.stagedModules.get(newId)
@@ -95,10 +102,13 @@ export class ModuleHost implements IModuleHost<HandlerID> {
       after.applyToClient()
 
       // REST-registered commands
-      const { remove } = commandDiff(before, after)
-      await Promise.all(remove.map(async ({ id, guild }) => await this.deleteAppCommand(id, guild)))
-      await Promise.all([...Object.values(after.slashCommands), ...Object.values(after.contextMenuCommands)]
-        .map(async it => await this.upsertAppCommand(it.builder.toJSON(), it.guild)))
+      // If this.modules is empty, the bulk overwrite would have happened already, so no need to do this part
+      if (this.modules.size !== 0) {
+        const { remove } = commandDiff(before, after)
+        await Promise.all(remove.map(async ({ id, guild }) => await this.deleteAppCommand(id, guild)))
+        await Promise.all([...Object.values(after.slashCommands), ...Object.values(after.contextMenuCommands)]
+          .map(async it => await this.upsertAppCommand(it.builder.toJSON(), it.guild)))
+      }
 
       this.modules.set(newId, after)
       this.stagedModules.delete(newId)
@@ -146,5 +156,9 @@ export class ModuleHost implements IModuleHost<HandlerID> {
     await this.client.rest.post(guild === undefined
       ? Routes.applicationCommands(this.clientId)
       : Routes.applicationGuildCommands(this.clientId, guild), { body: data })
+  }
+
+  private async overwriteAppCommands (data: RESTPutAPIApplicationCommandsJSONBody): Promise<void> {
+    await this.client.rest.put(Routes.applicationCommands(this.clientId), { body: data })
   }
 }
