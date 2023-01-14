@@ -82,7 +82,8 @@ export class ModuleHost implements IModuleHost<HandlerID> {
 
   async commitStaged (): Promise<void> {
     // If this.modules is empty, do bulk overwrite instead (this is probably the first commitStaged call)
-    if (this.modules.size === 0) {
+    const fromEmpty = this.modules.size === 0
+    if (fromEmpty) {
       const cmds = Array.from(this.stagedModules.values())
         .flatMap(mod => [...Object.values(mod.slashCommands), ...Object.values(mod.contextMenuCommands)])
         .map(cmd => cmd.builder.toJSON())
@@ -103,7 +104,7 @@ export class ModuleHost implements IModuleHost<HandlerID> {
 
       // REST-registered commands
       // If this.modules is empty, the bulk overwrite would have happened already, so no need to do this part
-      if (this.modules.size !== 0) {
+      if (!fromEmpty) {
         const { remove } = commandDiff(before, after)
         await Promise.all(remove.map(async ({ id, guild }) => await this.deleteAppCommand(id, guild)))
         await Promise.all([...Object.values(after.slashCommands), ...Object.values(after.contextMenuCommands)]
