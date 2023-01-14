@@ -47,7 +47,7 @@ export interface CommandConfig<B extends SlashCommandBuilder | ContextMenuComman
    * @param interaction The interaction you are responding to.
    * @param checkReturnValue The return value of the call to {@link check} with this interaction.
    */
-  run: (interaction: I, checkReturnValue?: T) => Awaitable<string> | undefined
+  run: (interaction: I, checkReturnValue?: T) => Awaitable<string | undefined> | Promise<void>
 }
 
 /**
@@ -56,7 +56,7 @@ export interface CommandConfig<B extends SlashCommandBuilder | ContextMenuComman
  */
 export type CommandConfigOrOnRun<B extends SlashCommandBuilder | ContextMenuCommandBuilder, I extends CommandInteraction, T = void> =
   | CommandConfig<B, I, T>
-  | ((i: I) => Awaitable<string> | undefined)
+  | ((i: I) => Awaitable<string | undefined> | Promise<void>)
 
 /**
  * A module describes a coherent high-level feature, such as quote tracking, class lookups, and schedule sharing.
