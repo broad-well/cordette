@@ -93,7 +93,7 @@ export class Module implements IModule<HandlerID> {
     >
   ): HandlerID {
     const id = `${this.id}: /${command}`
-    let builder = new SlashCommandBuilder()
+    const builder = new SlashCommandBuilder()
       .setName(command)
       .setDescription(description)
 
@@ -104,9 +104,9 @@ export class Module implements IModule<HandlerID> {
           }
         : configOrOnRun
 
-    if (config.build != null) builder = config.build(builder)
+    const finalBuilder = config.build != undefined ? config.build(builder) : builder
     const handler = this.slashHandler(command, id, config)
-    this.slashCommands[id] = { guild: config.guild, builder, handler }
+    this.slashCommands[id] = { guild: config.guild, builder: finalBuilder, handler }
 
     return new HandlerID(id)
   }
@@ -205,13 +205,13 @@ export class Module implements IModule<HandlerID> {
     >
   ): HandlerID {
     const id = `${this.id}: ContextMenu ${JSON.stringify(label)}`
-    let builder = new ContextMenuCommandBuilder().setName(label).setType(type)
+    const builder = new ContextMenuCommandBuilder().setName(label).setType(type)
     const config =
       configOrOnRun instanceof Function
         ? { run: configOrOnRun }
         : configOrOnRun
 
-    if (config.build != null) builder = config.build(builder)
+    const finalBuilder = config.build != null ? config.build(builder) : builder
     const eventHandler =
       type === ApplicationCommandType.Message
         ? this.messageContextMenuHandler(
@@ -221,7 +221,7 @@ export class Module implements IModule<HandlerID> {
           label, id, config as CommandConfig<ContextMenuCommandBuilder, UserContextMenuCommandInteraction, T>
         )
 
-    this.contextMenuCommands[id] = { guild: config.guild, builder, handler: eventHandler }
+    this.contextMenuCommands[id] = { guild: config.guild, builder: finalBuilder, handler: eventHandler }
     return new HandlerID(id)
   }
 
