@@ -104,7 +104,7 @@ export class Module implements IModule<HandlerID> {
           }
         : configOrOnRun
 
-    const finalBuilder = config.build != undefined ? config.build(builder) : builder
+    const finalBuilder = config.build !== undefined ? config.build(builder) : builder
     const handler = this.slashHandler(command, id, config)
     this.slashCommands[id] = { guild: config.guild, builder: finalBuilder, handler }
 

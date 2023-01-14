@@ -18,7 +18,7 @@ import {
  * @template I The type of interaction that this object describes.
  * @template T Any arbitrary type for the information successfully resolved in the `check` stage to be passed to the `run` stage.
  */
-export interface CommandConfig<B extends SlashCommandBuilder|ContextMenuCommandBuilder, I extends CommandInteraction, T = void> {
+export interface CommandConfig<B extends SlashCommandBuilder | ContextMenuCommandBuilder, I extends CommandInteraction, T = void> {
   /**
    * The snowflake ID of the guild to make this command available to.
    * If not specified, this command will be registered as a global command
@@ -54,7 +54,7 @@ export interface CommandConfig<B extends SlashCommandBuilder|ContextMenuCommandB
  * Either an object with "guild build check run" components describing a handler or
  * just the "run" function describing how to respond to an interaction.
  */
-export type CommandConfigOrOnRun<B extends SlashCommandBuilder|ContextMenuCommandBuilder, I extends CommandInteraction, T = void> =
+export type CommandConfigOrOnRun<B extends SlashCommandBuilder | ContextMenuCommandBuilder, I extends CommandInteraction, T = void> =
   | CommandConfig<B, I, T>
   | ((i: I) => Awaitable<string> | undefined)
 
