@@ -9,8 +9,12 @@ import {
   Client,
   UserContextMenuCommandInteraction,
   MessageContextMenuCommandInteraction,
-  GatewayIntentBits
+  GatewayIntentBits,
+  InteractionReplyOptions,
+  MessagePayload
 } from 'discord.js'
+
+type CommandConfigRunResult = Awaitable<string | InteractionReplyOptions | MessagePayload | undefined> | Promise<void>
 
 /**
  * A description of the details of an interaction and how to respond when someone uses it.
@@ -46,8 +50,9 @@ export interface CommandConfig<B extends SlashCommandBuilder | ContextMenuComman
    * Fulfill the incoming interaction after it has been checked with {@link check}.
    * @param interaction The interaction you are responding to.
    * @param checkReturnValue The return value of the call to {@link check} with this interaction.
+   * @returns Nothing (undefined) or your intended reply to the user that initiated this interaction.
    */
-  run: (interaction: I, checkReturnValue?: T) => Awaitable<string | undefined> | Promise<void>
+  run: (interaction: I, checkReturnValue?: T) => CommandConfigRunResult
 }
 
 /**
@@ -56,7 +61,7 @@ export interface CommandConfig<B extends SlashCommandBuilder | ContextMenuComman
  */
 export type CommandConfigOrOnRun<B extends SlashCommandBuilder | ContextMenuCommandBuilder, I extends CommandInteraction, T = void> =
   | CommandConfig<B, I, T>
-  | ((i: I) => Awaitable<string | undefined> | Promise<void>)
+  | ((interaction: I, checkReturnValue?: T) => CommandConfigRunResult)
 
 /**
  * A module describes a coherent high-level feature, such as quote tracking, class lookups, and schedule sharing.

@@ -168,10 +168,11 @@ export class Module implements IModule<HandlerID> {
     try {
       const result = await run(intx, resolved)
       if (result !== null && result !== undefined) {
-        await intx.reply({
-          content: result,
-          ephemeral: true
-        })
+        if (typeof result === 'string') {
+          await intx.reply({ content: result, ephemeral: true })
+        } else {
+          await intx.reply(result)
+        }
       }
     } catch (err: any) {
       try {

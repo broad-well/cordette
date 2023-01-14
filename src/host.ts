@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, RESTPostAPIApplicationCommandsJSONBody, Routes, Events, IntentsBitField, RESTPutAPIApplicationCommandsJSONBody } from 'discord.js'
+import { Client, GatewayIntentBits, RESTPostAPIApplicationCommandsJSONBody, Routes, IntentsBitField, RESTPutAPIApplicationCommandsJSONBody } from 'discord.js'
 import { HandlerID, Module } from './module'
 import { IModule } from './module_types'
 import assert from 'node:assert/strict'
@@ -136,9 +136,6 @@ export class ModuleHost implements IModuleHost<HandlerID> {
     this.client.options.intents = this.client.options.intents.add(Array.from(this.modules.values()).flatMap(m => m.intents))
     this.client.token = this.token
     this.client.rest.setToken(this.token)
-    this.client.once(Events.ClientReady, () => {
-      console.info('ModuleHost client is ready!')
-    })
     for (const mod of Array.from(this.modules.values())) {
       mod.applyToClient()
     }
