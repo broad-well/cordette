@@ -13,12 +13,15 @@ import {
   UserContextMenuCommandInteraction
 } from 'discord.js'
 import {
+  AutocompleteConfig,
+  CommandAutocompleteConfigOrOnRun,
   CommandConfig,
   CommandConfigOrOnRun,
   IModule
 } from './module_types'
 import shortid from 'shortid'
 import { stripMarkdownTag } from './utils'
+import assert from 'node:assert'
 
 /**
  * A tagged type wrapping a string that uniquely identifies a handler.
@@ -41,6 +44,7 @@ export class Module implements IModule<HandlerID> {
       guild?: string
       builder: Pick<SlashCommandBuilder, 'toJSON' | 'name'>
       handler: (...args: any) => any
+      autocomplete?: (...args: any) => any
     }
   } = {}
 
@@ -86,11 +90,7 @@ export class Module implements IModule<HandlerID> {
   slash<T> (
     command: string,
     description: string,
-    configOrOnRun: CommandConfigOrOnRun<
-    SlashCommandBuilder,
-    ChatInputCommandInteraction,
-    T
-    >
+    configOrOnRun: CommandAutocompleteConfigOrOnRun<T>
   ): HandlerID {
     const id = `${this.id}: /${command}`
     const builder = new SlashCommandBuilder()
@@ -106,7 +106,8 @@ export class Module implements IModule<HandlerID> {
 
     const finalBuilder = config.build !== undefined ? config.build(builder) : builder
     const handler = this.slashHandler(command, id, config)
-    this.slashCommands[id] = { guild: config.guild, builder: finalBuilder, handler }
+    const autocomplete = this.slashAutocompleteHandler(command, id, config)
+    this.slashCommands[id] = { guild: config.guild, builder: finalBuilder, handler, autocomplete }
 
     return new HandlerID(id)
   }
@@ -121,6 +122,26 @@ export class Module implements IModule<HandlerID> {
         await this.checkThenRun(intx, id, config)
       }
     }
+  }
+
+  private slashAutocompleteHandler (name: string, id: string, config: AutocompleteConfig): ((intx: Interaction) => Promise<void>) | undefined {
+    if (config.autocomplete !== undefined) {
+      return async (intx: Interaction) => {
+        if (intx.isAutocomplete() && intx.commandName === name) {
+          assert(config.autocomplete !== undefined)
+          try {
+            const res = await config.autocomplete(intx)
+            if (res !== null) {
+              await intx.respond(res)
+            }
+          } catch (e: unknown) {
+            console.info(`${id} failed`)
+            console.error(e)
+          }
+        }
+      }
+    }
+    return undefined
   }
 
   private userContextMenuHandler<T> (
@@ -253,11 +274,14 @@ export class Module implements IModule<HandlerID> {
         }
       }
     }
-    for (const { handler } of [
-      ...Object.values(this.slashCommands),
-      ...Object.values(this.contextMenuCommands)
-    ]) {
+    for (const { handler } of Object.values(this.contextMenuCommands)) {
       this.client.on(Events.InteractionCreate, handler)
+    }
+    for (const { handler, autocomplete } of Object.values(this.slashCommands)) {
+      this.client.on(Events.InteractionCreate, handler)
+      if (autocomplete !== undefined) {
+        this.client.on(Events.InteractionCreate, autocomplete)
+      }
     }
   }
 
@@ -267,11 +291,14 @@ export class Module implements IModule<HandlerID> {
         this.client.removeListener(evt, handler)
       }
     }
-    for (const { handler } of [
-      ...Object.values(this.slashCommands),
-      ...Object.values(this.contextMenuCommands)
-    ]) {
+    for (const { handler } of Object.values(this.contextMenuCommands)) {
       this.client.removeListener(Events.InteractionCreate, handler)
+    }
+    for (const { handler, autocomplete } of Object.values(this.slashCommands)) {
+      this.client.removeListener(Events.InteractionCreate, handler)
+      if (autocomplete !== undefined) {
+        this.client.removeListener(Events.InteractionCreate, autocomplete)
+      }
     }
   }
 

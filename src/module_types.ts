@@ -11,7 +11,9 @@ import {
   MessageContextMenuCommandInteraction,
   GatewayIntentBits,
   InteractionReplyOptions,
-  MessagePayload
+  MessagePayload,
+  AutocompleteInteraction,
+  ApplicationCommandOptionChoiceData
 } from 'discord.js'
 
 type CommandConfigRunResult = Awaitable<string | InteractionReplyOptions | MessagePayload | undefined> | Promise<void>
@@ -55,6 +57,10 @@ export interface CommandConfig<B extends SlashCommandBuilder | ContextMenuComman
   run: (interaction: I, checkReturnValue?: T) => CommandConfigRunResult
 }
 
+export interface AutocompleteConfig {
+  autocomplete?: (interaction: AutocompleteInteraction) => Awaitable<ApplicationCommandOptionChoiceData[] | null>
+}
+
 /**
  * Either an object with "guild build check run" components describing a handler or
  * just the "run" function describing how to respond to an interaction.
@@ -62,6 +68,14 @@ export interface CommandConfig<B extends SlashCommandBuilder | ContextMenuComman
 export type CommandConfigOrOnRun<B extends SlashCommandBuilder | ContextMenuCommandBuilder, I extends CommandInteraction, T = void> =
   | CommandConfig<B, I, T>
   | ((interaction: I, checkReturnValue?: T) => CommandConfigRunResult)
+
+/**
+ * Either an object with "guild build autocomplete check run" components describing a handler for a slash command or
+ * just the "run" function describing how to respond to an interaction.
+ */
+export type CommandAutocompleteConfigOrOnRun<T = void> =
+  | (CommandConfig<SlashCommandBuilder, ChatInputCommandInteraction, T> & AutocompleteConfig)
+  | ((interaction: ChatInputCommandInteraction, checkReturnValue?: T) => CommandConfigRunResult)
 
 /**
  * A module describes a coherent high-level feature, such as quote tracking, class lookups, and schedule sharing.
@@ -117,7 +131,7 @@ export interface IModule<ID> {
   slash: <T>(
     command: string,
     description: string,
-    handlers: CommandConfigOrOnRun<SlashCommandBuilder, ChatInputCommandInteraction, T>
+    handlers: CommandAutocompleteConfigOrOnRun<T>
   ) => ID
 
   /**
